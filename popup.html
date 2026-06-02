@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Google Translate Resizer</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Google Translate Resizer</h1>
+          <p id="statusText">讀取目前分頁中...</p>
+        </div>
+        <label class="switch" title="啟用或停用調整">
+          <input id="enabled" type="checkbox">
+          <span></span>
+        </label>
+      </header>
+
+      <section class="mode" aria-label="調整模式">
+        <button id="linkedMode" type="button" aria-pressed="true">同步</button>
+        <button id="splitMode" type="button" aria-pressed="false">分開</button>
+      </section>
+
+      <section id="linkedControls" class="controls">
+        <label class="control" for="linkedWidth">
+          <span>左右寬度</span>
+          <strong id="linkedValue">640 px</strong>
+        </label>
+        <input id="linkedWidth" type="range" min="320" max="1200" step="10">
+      </section>
+
+      <section id="splitControls" class="controls" hidden>
+        <label class="control" for="leftWidth">
+          <span>左側原文</span>
+          <strong id="leftValue">640 px</strong>
+        </label>
+        <input id="leftWidth" type="range" min="320" max="1200" step="10">
+
+        <label class="control" for="rightWidth">
+          <span>右側譯文</span>
+          <strong id="rightValue">640 px</strong>
+        </label>
+        <input id="rightWidth" type="range" min="320" max="1200" step="10">
+      </section>
+
+      <footer class="actions">
+        <button id="reset" type="button">還原預設</button>
+        <a href="https://translate.google.com/" target="_blank" rel="noreferrer">開啟翻譯</a>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Google Translate Resizer",
+  "version": "0.1.0",
+  "description": "Resize the source and translation panels on Google Translate.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://translate.google.com/*",
+    "https://translate.google.com.tw/*",
+    "https://translate.google.com.hk/*",
+    "https://translate.google.co.jp/*",
+    "https://translate.google.co.kr/*",
+    "https://translate.google.co.uk/*"
+  ],
+  "action": {
+    "default_title": "Google Translate Resizer",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://translate.google.com/*",
+        "https://translate.google.com.tw/*",
+        "https://translate.google.com.hk/*",
+        "https://translate.google.co.jp/*",
+        "https://translate.google.co.kr/*",
+        "https://translate.google.co.uk/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

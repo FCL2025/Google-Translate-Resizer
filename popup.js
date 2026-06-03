@@ -92,6 +92,41 @@ async function getActiveTab() {
   return tabs[0];
 }
 
+async function sendApplyMessage(tabId) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: "GTR_APPLY_SETTINGS", settings },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+
+        resolve({ ok: true, response });
+      }
+    );
+  });
+}
+
+async function injectContentScript(tabId) {
+  if (!chrome.scripting?.executeScript) {
+    return false;
+  }
+
+  return new Promise((resolve) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ["content.js"]
+      },
+      () => {
+        resolve(!chrome.runtime.lastError);
+      }
+    );
+  });
+}
+
 async function sendSettingsToTab() {
   const tab = await getActiveTab();
   if (!tab?.id || !/^https:\/\/translate\.google\./.test(tab.url ?? "")) {
@@ -99,18 +134,19 @@ async function sendSettingsToTab() {
     return;
   }
 
-  chrome.tabs.sendMessage(
-    tab.id,
-    { type: "GTR_APPLY_SETTINGS", settings },
-    (response) => {
-      if (chrome.runtime.lastError) {
-        setStatus(msg("statusRefreshTranslateTab"));
-        return;
-      }
+  let result = await sendApplyMessage(tab.id);
 
-      setStatus(response?.found ? msg("statusApplied") : msg("statusPanelsMissing"));
-    }
-  );
+  if (!result.ok) {
+    const injected = await injectContentScript(tab.id);
+    result = injected ? await sendApplyMessage(tab.id) : result;
+  }
+
+  if (!result.ok) {
+    setStatus(msg("statusRefreshTranslateTab"));
+    return;
+  }
+
+  setStatus(result.response?.found ? msg("statusApplied") : msg("statusPanelsMissing"));
 }
 
 async function saveSettings() {
@@ -138,7 +174,7 @@ function scheduleApply(immediate = false) {
     return;
   }
 
-  applyTimer = window.setTimeout(() => void sendSettingsToTab(), 60);
+  applyTimer = window.setTimeout(() => void sendSettingsToTab(), 30);
 }
 
 function saveAndApply(immediate = false) {

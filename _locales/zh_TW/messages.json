@@ -42,7 +42,7 @@
     "message": "請在 Google Translate 分頁使用"
   },
   "statusRefreshTranslateTab": {
-    "message": "重新整理翻譯分頁後即可套用"
+    "message": "無法套用，請重新整理 Google 翻譯"
   },
   "statusApplied": {
     "message": "已套用到目前分頁"

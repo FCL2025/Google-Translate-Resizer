@@ -42,7 +42,7 @@
     "message": "Use this on a Google Translate tab"
   },
   "statusRefreshTranslateTab": {
-    "message": "Refresh Google Translate to apply"
+    "message": "Could not apply; refresh Google Translate"
   },
   "statusApplied": {
     "message": "Applied to the current tab"

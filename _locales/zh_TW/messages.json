@@ -32,6 +32,15 @@
   "rightWidthLabel": {
     "message": "右側譯文"
   },
+  "previewOptionsLabel": {
+    "message": "預覽選項"
+  },
+  "compactPreviewLabel": {
+    "message": "緊湊譯文預覽"
+  },
+  "compactPreviewHint": {
+    "message": "減少右側譯文區塊中額外的視覺空白。"
+  },
   "resetButton": {
     "message": "還原預設"
   },

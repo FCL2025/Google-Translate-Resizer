@@ -32,6 +32,15 @@
   "rightWidthLabel": {
     "message": "Translation panel"
   },
+  "previewOptionsLabel": {
+    "message": "Preview options"
+  },
+  "compactPreviewLabel": {
+    "message": "Compact translation preview"
+  },
+  "compactPreviewHint": {
+    "message": "Reduces extra visual gaps in the result panel."
+  },
   "resetButton": {
     "message": "Reset"
   },

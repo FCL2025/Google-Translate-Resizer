@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.4";
+  const SCRIPT_VERSION = "0.1.5";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -7,7 +7,8 @@
     linked: true,
     linkedWidth: 640,
     leftWidth: 640,
-    rightWidth: 640
+    rightWidth: 640,
+    compactPreview: true
   };
   const LIMITS = {
     min: 320,
@@ -81,6 +82,33 @@
         max-width: none !important;
       }
 
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd {
+        line-height: 1.45 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd br + br {
+        display: none !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd :is(p, div, span) {
+        margin-block-start: 0 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd :is(p, div) {
+        margin-block-end: 0.35em !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd :is(p, div):empty,
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd :is(p, div):has(> br:only-child) {
+        display: none !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd :is(.ryNqvb, .HwtZe, .jCAhz, .ChMk0b) {
+        line-height: 1.45 !important;
+        margin-block: 0 !important;
+        padding-block: 0 !important;
+      }
+
       @media (max-width: 720px) {
         body.gtr-resizer-enabled [data-gtr-resizer-container="true"] {
           display: block !important;
@@ -111,7 +139,8 @@
       linked: settings.linked !== false,
       linkedWidth: clampWidth(settings.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth),
       leftWidth: clampWidth(settings.leftWidth ?? settings.linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
-      rightWidth: clampWidth(settings.rightWidth ?? settings.linkedWidth ?? DEFAULT_SETTINGS.rightWidth)
+      rightWidth: clampWidth(settings.rightWidth ?? settings.linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
+      compactPreview: settings.compactPreview !== false
     };
   }
 
@@ -229,6 +258,7 @@
     const panels = findPanels();
     if (!state.currentSettings.enabled || !panels.found) {
       document.body.classList.remove("gtr-resizer-enabled");
+      document.body.classList.remove("gtr-compact-preview-enabled");
       if (!state.currentSettings.enabled) {
         clearMarkers();
       }
@@ -246,6 +276,7 @@
     markPanels(panels);
     setPageVariables(state.currentSettings, measureAnchorWidth(panels));
     document.body.classList.add("gtr-resizer-enabled");
+    document.body.classList.toggle("gtr-compact-preview-enabled", state.currentSettings.compactPreview);
 
     return {
       ok: true,

@@ -1,11 +1,12 @@
 const STORAGE_KEY = "gtrSettings";
-const CONTENT_VERSION = "0.1.4";
+const CONTENT_VERSION = "0.1.5";
 const DEFAULT_SETTINGS = {
   enabled: true,
   linked: true,
   linkedWidth: 640,
   leftWidth: 640,
-  rightWidth: 640
+  rightWidth: 640,
+  compactPreview: true
 };
 
 const elements = {
@@ -17,6 +18,7 @@ const elements = {
   linkedWidth: document.getElementById("linkedWidth"),
   leftWidth: document.getElementById("leftWidth"),
   rightWidth: document.getElementById("rightWidth"),
+  compactPreview: document.getElementById("compactPreview"),
   linkedValue: document.getElementById("linkedValue"),
   leftValue: document.getElementById("leftValue"),
   rightValue: document.getElementById("rightValue"),
@@ -62,7 +64,8 @@ function normalizeSettings(value = {}) {
     linked: value.linked !== false,
     linkedWidth: clampWidth(value.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth),
     leftWidth: clampWidth(value.leftWidth ?? value.linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
-    rightWidth: clampWidth(value.rightWidth ?? value.linkedWidth ?? DEFAULT_SETTINGS.rightWidth)
+    rightWidth: clampWidth(value.rightWidth ?? value.linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
+    compactPreview: value.compactPreview !== false
   };
 }
 
@@ -72,6 +75,7 @@ function setStatus(text) {
 
 function render() {
   elements.enabled.checked = settings.enabled;
+  elements.compactPreview.checked = settings.compactPreview;
 
   elements.linkedMode.setAttribute("aria-pressed", String(settings.linked));
   elements.splitMode.setAttribute("aria-pressed", String(!settings.linked));
@@ -219,6 +223,12 @@ function setLinkedMode(linked) {
 function bindEvents() {
   elements.enabled.addEventListener("change", () => {
     settings = normalizeSettings({ ...settings, enabled: elements.enabled.checked });
+    render();
+    saveAndApply(true);
+  });
+
+  elements.compactPreview.addEventListener("change", () => {
+    settings = normalizeSettings({ ...settings, compactPreview: elements.compactPreview.checked });
     render();
     saveAndApply(true);
   });

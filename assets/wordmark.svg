@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 256" role="img" aria-labelledby="title desc">
+  <title id="title">Google Translate Resizer wordmark</title>
+  <desc id="desc">The Google Translate Resizer wordmark with a translation panel resize icon.</desc>
+  <defs>
+    <linearGradient id="tile" x1="36" y1="26" x2="220" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2b7de9"/>
+      <stop offset="1" stop-color="#185abc"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="256" rx="0" fill="#ffffff"/>
+  <rect x="36" y="28" width="200" height="200" rx="44" fill="url(#tile)"/>
+  <rect x="64" y="76" width="74" height="66" rx="12" fill="#ffffff" opacity="0.96"/>
+  <rect x="146" y="76" width="74" height="66" rx="12" fill="#e8f0fe" opacity="0.98"/>
+  <path d="M121 109h63" fill="none" stroke="#1a73e8" stroke-width="10" stroke-linecap="round"/>
+  <path d="M125 90l-21 19 21 19" fill="none" stroke="#1a73e8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M180 90l21 19-21 19" fill="none" stroke="#1a73e8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="152" cy="109" r="7" fill="#34a853"/>
+  <text x="136" y="188" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="-2" fill="#ffffff">GTR</text>
+  <rect x="87" y="200" width="98" height="7" rx="3.5" fill="#fbbc04"/>
+  <text x="272" y="112" font-family="Segoe UI, Arial, sans-serif" font-size="58" font-weight="750" letter-spacing="0" fill="#202124">Google Translate</text>
+  <text x="272" y="179" font-family="Segoe UI, Arial, sans-serif" font-size="58" font-weight="750" letter-spacing="0" fill="#1a73e8">Resizer</text>
+  <rect x="272" y="202" width="246" height="8" rx="4" fill="#34a853"/>
+</svg>

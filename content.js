@@ -1,9 +1,5 @@
 (() => {
-  if (window.__gtrResizerLoaded) {
-    return;
-  }
-  window.__gtrResizerLoaded = true;
-
+  const SCRIPT_VERSION = "0.1.4";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -19,8 +15,11 @@
   };
   const GAP_PX = 8;
 
-  let currentSettings = { ...DEFAULT_SETTINGS };
-  let observer = null;
+  const state = window.__gtrResizerState ?? {};
+  window.__gtrResizerState = state;
+  state.anchorWidths ??= new WeakMap();
+  state.currentSettings ??= { ...DEFAULT_SETTINGS };
+
   let pendingApply = null;
 
   function getStyleText() {
@@ -28,13 +27,20 @@
       body.gtr-resizer-enabled [data-gtr-resizer-container="true"] {
         display: grid !important;
         grid-template-columns: var(--gtr-left-width) var(--gtr-right-width) !important;
-        column-gap: ${GAP_PX}px !important;
+        column-gap: var(--gtr-gap-width) !important;
         align-items: stretch !important;
         justify-content: start !important;
-        inline-size: auto !important;
-        width: auto !important;
+        inline-size: var(--gtr-total-width) !important;
+        width: var(--gtr-total-width) !important;
+        margin-inline-start: var(--gtr-center-offset) !important;
+        margin-inline-end: var(--gtr-center-offset) !important;
         max-inline-size: none !important;
         max-width: none !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+      }
+
+      body.gtr-resizer-enabled [data-gtr-resizer-shell="true"] {
         overflow: visible !important;
       }
 
@@ -127,66 +133,127 @@
     const existingStyle = document.getElementById(STYLE_ID);
     const style = existingStyle ?? document.createElement("style");
     style.id = STYLE_ID;
-    style.textContent = getStyleText();
+
+    const styleText = getStyleText();
+    if (style.textContent !== styleText) {
+      style.textContent = styleText;
+    }
 
     if (!existingStyle) {
       (document.head ?? document.documentElement).append(style);
     }
   }
 
-  function clearMarkers() {
-    document.querySelectorAll("[data-gtr-resizer-container], [data-gtr-resizer-left], [data-gtr-resizer-right]").forEach((element) => {
-      element.removeAttribute("data-gtr-resizer-container");
-      element.removeAttribute("data-gtr-resizer-left");
-      element.removeAttribute("data-gtr-resizer-right");
-    });
+  function clearMarkers(panels = state.panels) {
+    panels?.container?.removeAttribute("data-gtr-resizer-container");
+    panels?.leftPanel?.removeAttribute("data-gtr-resizer-left");
+    panels?.rightPanel?.removeAttribute("data-gtr-resizer-right");
+    panels?.shell?.removeAttribute("data-gtr-resizer-shell");
+  }
+
+  function markPanels(panels) {
+    if (state.panels?.container !== panels.container) {
+      clearMarkers();
+    }
+
+    panels.container.setAttribute("data-gtr-resizer-container", "true");
+    panels.leftPanel.setAttribute("data-gtr-resizer-left", "true");
+    panels.rightPanel.setAttribute("data-gtr-resizer-right", "true");
+    panels.shell?.setAttribute("data-gtr-resizer-shell", "true");
+    state.panels = panels;
   }
 
   function findPanels() {
-    const rightPanel = document.querySelector(".OPPzxe > .sciAJc, c-wiz.sciAJc, .sciAJc[role='region']");
-    const leftPanel = rightPanel?.parentElement?.querySelector(":scope > .n4sEPd")
-      ?? document.querySelector(".OPPzxe > .n4sEPd, div.n4sEPd");
-    const container = rightPanel?.parentElement
-      ?? leftPanel?.parentElement
-      ?? document.querySelector(".OPPzxe");
+    const containers = Array.from(document.querySelectorAll(".OPPzxe"));
+    let container = null;
+    let leftPanel = null;
+    let rightPanel = null;
 
-    clearMarkers();
-
-    if (container && leftPanel && rightPanel) {
-      container.setAttribute("data-gtr-resizer-container", "true");
-      leftPanel.setAttribute("data-gtr-resizer-left", "true");
-      rightPanel.setAttribute("data-gtr-resizer-right", "true");
+    for (const candidate of containers) {
+      const candidateLeft = candidate.querySelector(":scope > .n4sEPd");
+      const candidateRight = candidate.querySelector(":scope > .sciAJc");
+      if (candidateLeft && candidateRight) {
+        container = candidate;
+        leftPanel = candidateLeft;
+        rightPanel = candidateRight;
+        break;
+      }
     }
 
     return {
       container,
       leftPanel,
       rightPanel,
+      shell: container?.parentElement,
       found: Boolean(container && leftPanel && rightPanel)
     };
   }
 
-  function setPageVariables(settings) {
+  function measureAnchorWidth(panels) {
+    const cachedWidth = state.anchorWidths.get(panels.container);
+    if (cachedWidth) {
+      return cachedWidth;
+    }
+
+    const wasEnabled = document.body.classList.contains("gtr-resizer-enabled");
+    document.body.classList.remove("gtr-resizer-enabled");
+
+    const leftRect = panels.leftPanel.getBoundingClientRect();
+    const rightRect = panels.rightPanel.getBoundingClientRect();
+    const anchorLeft = Math.min(leftRect.left, rightRect.left);
+    const anchorRight = Math.max(leftRect.right, rightRect.right);
+    const anchorWidth = Math.max(1, Math.round(anchorRight - anchorLeft));
+
+    document.body.classList.toggle("gtr-resizer-enabled", wasEnabled);
+    state.anchorWidths.set(panels.container, anchorWidth);
+    return anchorWidth;
+  }
+
+  function setPageVariables(settings, anchorWidth) {
     const widths = getEffectiveWidths(settings);
+    const totalWidth = widths.left + widths.right + GAP_PX;
+    const centerOffset = (anchorWidth - totalWidth) / 2;
 
     document.documentElement.style.setProperty("--gtr-left-width", `${widths.left}px`);
     document.documentElement.style.setProperty("--gtr-right-width", `${widths.right}px`);
+    document.documentElement.style.setProperty("--gtr-gap-width", `${GAP_PX}px`);
+    document.documentElement.style.setProperty("--gtr-total-width", `${totalWidth}px`);
+    document.documentElement.style.setProperty("--gtr-anchor-width", `${anchorWidth}px`);
+    document.documentElement.style.setProperty("--gtr-center-offset", `${centerOffset}px`);
   }
 
-  function applySettings(settings = currentSettings) {
-    currentSettings = normalizeSettings(settings);
+  function applySettings(settings = state.currentSettings) {
+    state.currentSettings = normalizeSettings(settings);
     ensureStyle();
-    setPageVariables(currentSettings);
 
     const panels = findPanels();
-    document.body.classList.toggle("gtr-resizer-enabled", currentSettings.enabled && panels.found);
+    if (!state.currentSettings.enabled || !panels.found) {
+      document.body.classList.remove("gtr-resizer-enabled");
+      if (!state.currentSettings.enabled) {
+        clearMarkers();
+      }
+
+      return {
+        ok: true,
+        version: SCRIPT_VERSION,
+        enabled: state.currentSettings.enabled,
+        found: panels.found,
+        leftWidth: getEffectiveWidths(state.currentSettings).left,
+        rightWidth: getEffectiveWidths(state.currentSettings).right
+      };
+    }
+
+    markPanels(panels);
+    setPageVariables(state.currentSettings, measureAnchorWidth(panels));
+    document.body.classList.add("gtr-resizer-enabled");
 
     return {
       ok: true,
-      enabled: currentSettings.enabled,
+      version: SCRIPT_VERSION,
+      enabled: state.currentSettings.enabled,
       found: panels.found,
-      leftWidth: getEffectiveWidths(currentSettings).left,
-      rightWidth: getEffectiveWidths(currentSettings).right
+      leftWidth: getEffectiveWidths(state.currentSettings).left,
+      rightWidth: getEffectiveWidths(state.currentSettings).right
     };
   }
 
@@ -196,43 +263,61 @@
   }
 
   function startObserver() {
-    if (observer) {
-      return;
-    }
+    state.observer?.disconnect();
 
-    observer = new MutationObserver(scheduleApply);
-    observer.observe(document.documentElement, {
+    state.observer = new MutationObserver(() => {
+      const panels = state.panels;
+      if (!panels?.container?.isConnected || !panels.leftPanel?.isConnected || !panels.rightPanel?.isConnected) {
+        scheduleApply();
+      }
+    });
+    state.observer.observe(document.body ?? document.documentElement, {
       childList: true,
       subtree: true
     });
   }
 
+  state.applySettings = applySettings;
+  window.__gtrResizerApplySettings = applySettings;
+  window.__gtrResizerVersion = SCRIPT_VERSION;
+
   chrome.storage.sync.get({ [STORAGE_KEY]: DEFAULT_SETTINGS }, (result) => {
-    currentSettings = normalizeSettings(result[STORAGE_KEY]);
-    applySettings(currentSettings);
+    state.currentSettings = normalizeSettings(result[STORAGE_KEY]);
+    applySettings(state.currentSettings);
     startObserver();
   });
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "sync" || !changes[STORAGE_KEY]) {
-      return;
-    }
-    applySettings(changes[STORAGE_KEY].newValue);
-  });
+  if (!state.storageListener) {
+    state.storageListener = (changes, areaName) => {
+      if (areaName !== "sync" || !changes[STORAGE_KEY]) {
+        return;
+      }
+      state.applySettings(changes[STORAGE_KEY].newValue);
+    };
+    chrome.storage.onChanged.addListener(state.storageListener);
+  }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === "GTR_APPLY_SETTINGS") {
-      sendResponse(applySettings(message.settings));
+  if (!state.messageListener) {
+    state.messageListener = (message, _sender, sendResponse) => {
+      if (message?.type === "GTR_APPLY_SETTINGS") {
+        sendResponse(state.applySettings(message.settings));
+        return false;
+      }
+
+      if (message?.type === "GTR_GET_STATUS") {
+        sendResponse(state.applySettings());
+        return false;
+      }
+
+      if (message?.type === "GTR_GET_VERSION") {
+        sendResponse({ ok: true, version: SCRIPT_VERSION });
+        return false;
+      }
+
       return false;
-    }
-
-    if (message?.type === "GTR_GET_STATUS") {
-      sendResponse(applySettings());
-      return false;
-    }
-
-    return false;
-  });
-
-  window.__gtrResizerApplySettings = applySettings;
+    };
+    chrome.runtime.onMessage.addListener(state.messageListener);
+  } else {
+    state.applySettings(state.currentSettings);
+  }
 })();

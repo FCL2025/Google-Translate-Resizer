@@ -1,4 +1,5 @@
 const STORAGE_KEY = "gtrSettings";
+const CONTENT_VERSION = "0.1.4";
 const DEFAULT_SETTINGS = {
   enabled: true,
   linked: true,
@@ -26,6 +27,7 @@ const elements = {
 let settings = { ...DEFAULT_SETTINGS };
 let saveTimer = null;
 let applyTimer = null;
+const ensuredContentTabs = new Set();
 
 function msg(name) {
   return chrome.i18n.getMessage(name) || name;
@@ -92,28 +94,7 @@ async function getActiveTab() {
   return tabs[0];
 }
 
-async function sendApplyMessage(tabId) {
-  return new Promise((resolve) => {
-    chrome.tabs.sendMessage(
-      tabId,
-      { type: "GTR_APPLY_SETTINGS", settings },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-
-        resolve({ ok: true, response });
-      }
-    );
-  });
-}
-
 async function injectContentScript(tabId) {
-  if (!chrome.scripting?.executeScript) {
-    return false;
-  }
-
   return new Promise((resolve) => {
     chrome.scripting.executeScript(
       {
@@ -127,6 +108,53 @@ async function injectContentScript(tabId) {
   });
 }
 
+async function ensureContentScript(tabId) {
+  if (!chrome.scripting?.executeScript) {
+    return false;
+  }
+
+  if (ensuredContentTabs.has(tabId)) {
+    return true;
+  }
+
+  const injected = await injectContentScript(tabId);
+  if (injected) {
+    ensuredContentTabs.add(tabId);
+  }
+
+  return injected;
+}
+
+async function applySettingsInTab(tabId) {
+  return new Promise((resolve) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        args: [settings, CONTENT_VERSION],
+        func: (nextSettings, expectedVersion) => {
+          if (window.__gtrResizerVersion !== expectedVersion) {
+            return { ok: false, found: false, version: window.__gtrResizerVersion ?? null };
+          }
+
+          if (typeof window.__gtrResizerApplySettings !== "function") {
+            return { ok: false, found: false, version: window.__gtrResizerVersion ?? null };
+          }
+
+          return window.__gtrResizerApplySettings(nextSettings);
+        }
+      },
+      (results) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, found: false });
+          return;
+        }
+
+        resolve(results?.[0]?.result ?? { ok: false, found: false });
+      }
+    );
+  });
+}
+
 async function sendSettingsToTab() {
   const tab = await getActiveTab();
   if (!tab?.id || !/^https:\/\/translate\.google\./.test(tab.url ?? "")) {
@@ -134,19 +162,19 @@ async function sendSettingsToTab() {
     return;
   }
 
-  let result = await sendApplyMessage(tab.id);
-
-  if (!result.ok) {
-    const injected = await injectContentScript(tab.id);
-    result = injected ? await sendApplyMessage(tab.id) : result;
-  }
-
-  if (!result.ok) {
+  const contentReady = await ensureContentScript(tab.id);
+  if (!contentReady) {
     setStatus(msg("statusRefreshTranslateTab"));
     return;
   }
 
-  setStatus(result.response?.found ? msg("statusApplied") : msg("statusPanelsMissing"));
+  const response = await applySettingsInTab(tab.id);
+  if (!response?.ok) {
+    setStatus(msg("statusRefreshTranslateTab"));
+    return;
+  }
+
+  setStatus(response?.found ? msg("statusApplied") : msg("statusPanelsMissing"));
 }
 
 async function saveSettings() {

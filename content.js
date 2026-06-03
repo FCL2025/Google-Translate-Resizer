@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.6";
+  const SCRIPT_VERSION = "0.1.7";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -15,12 +15,14 @@
     max: 1200
   };
   const GAP_PX = 8;
+  const STARTUP_REAPPLY_DELAYS = [120, 300, 700, 1500, 3000];
 
   const state = window.__gtrResizerState ?? {};
   window.__gtrResizerState = state;
   state.anchorWidths ??= new WeakMap();
   state.currentSettings ??= { ...DEFAULT_SETTINGS };
   state.compactTextEntries ??= new Map();
+  state.startupTimers ??= [];
 
   let pendingApply = null;
   let pendingCompact = null;
@@ -82,6 +84,17 @@
       body.gtr-resizer-enabled [data-gtr-resizer-left="true"] textarea.er8xn {
         max-inline-size: none !important;
         max-width: none !important;
+      }
+
+      body.gtr-resizer-enabled [data-gtr-resizer-right="true"] > div,
+      body.gtr-resizer-enabled [data-gtr-resizer-right="true"] > c-wiz {
+        inline-size: 100% !important;
+        width: 100% !important;
+        max-inline-size: none !important;
+        max-width: none !important;
+        min-inline-size: 0 !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
       }
 
       body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .usGWQd {
@@ -158,12 +171,15 @@
   }
 
   function normalizeSettings(settings = {}) {
+    const enabled = settings.enabled !== false;
+    const linked = settings.linked !== false;
+    const linkedWidth = clampWidth(settings.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth);
     return {
-      enabled: settings.enabled !== false,
-      linked: settings.linked !== false,
-      linkedWidth: clampWidth(settings.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth),
-      leftWidth: clampWidth(settings.leftWidth ?? settings.linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
-      rightWidth: clampWidth(settings.rightWidth ?? settings.linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
+      enabled,
+      linked,
+      linkedWidth,
+      leftWidth: linked ? linkedWidth : clampWidth(settings.leftWidth ?? linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
+      rightWidth: linked ? linkedWidth : clampWidth(settings.rightWidth ?? linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
       compactPreview: settings.compactPreview !== false
     };
   }
@@ -414,16 +430,44 @@
     pendingApply = window.setTimeout(() => applySettings(), 80);
   }
 
+  function clearStartupTimers() {
+    for (const timer of state.startupTimers) {
+      window.clearTimeout(timer);
+    }
+    state.startupTimers = [];
+  }
+
+  function scheduleStartupReapply() {
+    clearStartupTimers();
+    state.startupTimers = STARTUP_REAPPLY_DELAYS.map((delay) => window.setTimeout(() => {
+      if (state.currentSettings.enabled) {
+        applySettings(state.currentSettings);
+      }
+    }, delay));
+  }
+
+  function panelsNeedRefresh(panels = state.panels) {
+    return (
+      !panels?.container?.isConnected ||
+      !panels.leftPanel?.isConnected ||
+      !panels.rightPanel?.isConnected ||
+      panels.container.getAttribute("data-gtr-resizer-container") !== "true" ||
+      panels.leftPanel.getAttribute("data-gtr-resizer-left") !== "true" ||
+      panels.rightPanel.getAttribute("data-gtr-resizer-right") !== "true"
+    );
+  }
+
   function startObserver() {
     state.observer?.disconnect();
 
     state.observer = new MutationObserver(() => {
-      const panels = state.panels;
-      if (!panels?.container?.isConnected || !panels.leftPanel?.isConnected || !panels.rightPanel?.isConnected) {
+      if (state.currentSettings.enabled && panelsNeedRefresh()) {
         scheduleApply();
       }
     });
     state.observer.observe(document.body ?? document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-gtr-resizer-container", "data-gtr-resizer-left", "data-gtr-resizer-right"],
       childList: true,
       subtree: true
     });
@@ -437,6 +481,7 @@
     state.currentSettings = normalizeSettings(result[STORAGE_KEY]);
     applySettings(state.currentSettings);
     startObserver();
+    scheduleStartupReapply();
   });
 
   if (!state.storageListener) {

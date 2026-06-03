@@ -1,5 +1,5 @@
 const STORAGE_KEY = "gtrSettings";
-const CONTENT_VERSION = "0.1.6";
+const CONTENT_VERSION = "0.1.7";
 const DEFAULT_SETTINGS = {
   enabled: true,
   linked: true,
@@ -59,12 +59,15 @@ function clampWidth(value) {
 }
 
 function normalizeSettings(value = {}) {
+  const enabled = value.enabled !== false;
+  const linked = value.linked !== false;
+  const linkedWidth = clampWidth(value.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth);
   return {
-    enabled: value.enabled !== false,
-    linked: value.linked !== false,
-    linkedWidth: clampWidth(value.linkedWidth ?? DEFAULT_SETTINGS.linkedWidth),
-    leftWidth: clampWidth(value.leftWidth ?? value.linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
-    rightWidth: clampWidth(value.rightWidth ?? value.linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
+    enabled,
+    linked,
+    linkedWidth,
+    leftWidth: linked ? linkedWidth : clampWidth(value.leftWidth ?? linkedWidth ?? DEFAULT_SETTINGS.leftWidth),
+    rightWidth: linked ? linkedWidth : clampWidth(value.rightWidth ?? linkedWidth ?? DEFAULT_SETTINGS.rightWidth),
     compactPreview: value.compactPreview !== false
   };
 }

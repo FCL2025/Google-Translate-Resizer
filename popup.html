@@ -1,32 +1,32 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Google Translate Resizer</title>
+    <title data-i18n="pageTitle">Google Translate Resizer</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
     <main class="app">
       <header class="header">
         <div>
-          <h1>Google Translate Resizer</h1>
-          <p id="statusText">讀取目前分頁中...</p>
+          <h1 data-i18n="pageTitle">Google Translate Resizer</h1>
+          <p id="statusText" data-i18n="loadingStatus">Loading current tab...</p>
         </div>
-        <label class="switch" title="啟用或停用調整">
+        <label class="switch" title="Enable or disable resizing" data-i18n-title="toggleTitle">
           <input id="enabled" type="checkbox">
           <span></span>
         </label>
       </header>
 
-      <section class="mode" aria-label="調整模式">
-        <button id="linkedMode" type="button" aria-pressed="true">同步</button>
-        <button id="splitMode" type="button" aria-pressed="false">分開</button>
+      <section class="mode" aria-label="Resize mode" data-i18n-aria-label="modeLabel">
+        <button id="linkedMode" type="button" aria-pressed="true" data-i18n="syncMode">Sync</button>
+        <button id="splitMode" type="button" aria-pressed="false" data-i18n="splitMode">Split</button>
       </section>
 
       <section id="linkedControls" class="controls">
         <label class="control" for="linkedWidth">
-          <span>左右寬度</span>
+          <span data-i18n="linkedWidthLabel">Both panels</span>
           <strong id="linkedValue">640 px</strong>
         </label>
         <input id="linkedWidth" type="range" min="320" max="1200" step="10">
@@ -34,21 +34,21 @@
 
       <section id="splitControls" class="controls" hidden>
         <label class="control" for="leftWidth">
-          <span>左側原文</span>
+          <span data-i18n="leftWidthLabel">Source panel</span>
           <strong id="leftValue">640 px</strong>
         </label>
         <input id="leftWidth" type="range" min="320" max="1200" step="10">
 
         <label class="control" for="rightWidth">
-          <span>右側譯文</span>
+          <span data-i18n="rightWidthLabel">Translation panel</span>
           <strong id="rightValue">640 px</strong>
         </label>
         <input id="rightWidth" type="range" min="320" max="1200" step="10">
       </section>
 
       <footer class="actions">
-        <button id="reset" type="button">還原預設</button>
-        <a href="https://translate.google.com/" target="_blank" rel="noreferrer">開啟翻譯</a>
+        <button id="reset" type="button" data-i18n="resetButton">Reset</button>
+        <a href="https://translate.google.com/" target="_blank" rel="noreferrer" data-i18n="openTranslate">Open Translate</a>
       </footer>
     </main>
 

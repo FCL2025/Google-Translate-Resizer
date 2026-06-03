@@ -27,6 +27,25 @@ let settings = { ...DEFAULT_SETTINGS };
 let saveTimer = null;
 let applyTimer = null;
 
+function msg(name) {
+  return chrome.i18n.getMessage(name) || name;
+}
+
+function applyLocalization() {
+  const uiLanguage = chrome.i18n.getUILanguage();
+  document.documentElement.lang = uiLanguage.toLowerCase().startsWith("zh") ? "zh-Hant" : "en";
+
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = msg(element.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((element) => {
+    element.title = msg(element.dataset.i18nTitle);
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((element) => {
+    element.setAttribute("aria-label", msg(element.dataset.i18nAriaLabel));
+  });
+}
+
 function clampWidth(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -76,7 +95,7 @@ async function getActiveTab() {
 async function sendSettingsToTab() {
   const tab = await getActiveTab();
   if (!tab?.id || !/^https:\/\/translate\.google\./.test(tab.url ?? "")) {
-    setStatus("請在 Google Translate 分頁使用");
+    setStatus(msg("statusUseTranslateTab"));
     return;
   }
 
@@ -85,11 +104,11 @@ async function sendSettingsToTab() {
     { type: "GTR_APPLY_SETTINGS", settings },
     (response) => {
       if (chrome.runtime.lastError) {
-        setStatus("重新整理翻譯分頁後即可套用");
+        setStatus(msg("statusRefreshTranslateTab"));
         return;
       }
 
-      setStatus(response?.found ? "已套用到目前分頁" : "找不到左右翻譯區塊");
+      setStatus(response?.found ? msg("statusApplied") : msg("statusPanelsMissing"));
     }
   );
 }
@@ -181,6 +200,8 @@ function bindEvents() {
 }
 
 async function init() {
+  applyLocalization();
+
   const result = await new Promise((resolve) => {
     chrome.storage.sync.get({ [STORAGE_KEY]: DEFAULT_SETTINGS }, resolve);
   });

@@ -1,0 +1,53 @@
+{
+  "extName": {
+    "message": "Google Translate Resizer"
+  },
+  "extDescription": {
+    "message": "調整 Google 翻譯左右兩側原文與譯文區塊寬度。"
+  },
+  "pageTitle": {
+    "message": "Google Translate Resizer"
+  },
+  "loadingStatus": {
+    "message": "讀取目前分頁中..."
+  },
+  "toggleTitle": {
+    "message": "啟用或停用調整"
+  },
+  "modeLabel": {
+    "message": "調整模式"
+  },
+  "syncMode": {
+    "message": "同步"
+  },
+  "splitMode": {
+    "message": "分開"
+  },
+  "linkedWidthLabel": {
+    "message": "左右寬度"
+  },
+  "leftWidthLabel": {
+    "message": "左側原文"
+  },
+  "rightWidthLabel": {
+    "message": "右側譯文"
+  },
+  "resetButton": {
+    "message": "還原預設"
+  },
+  "openTranslate": {
+    "message": "開啟翻譯"
+  },
+  "statusUseTranslateTab": {
+    "message": "請在 Google Translate 分頁使用"
+  },
+  "statusRefreshTranslateTab": {
+    "message": "重新整理翻譯分頁後即可套用"
+  },
+  "statusApplied": {
+    "message": "已套用到目前分頁"
+  },
+  "statusPanelsMissing": {
+    "message": "找不到左右翻譯區塊"
+  }
+}

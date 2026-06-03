@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.5";
+  const SCRIPT_VERSION = "0.1.6";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -20,8 +20,10 @@
   window.__gtrResizerState = state;
   state.anchorWidths ??= new WeakMap();
   state.currentSettings ??= { ...DEFAULT_SETTINGS };
+  state.compactTextEntries ??= new Map();
 
   let pendingApply = null;
+  let pendingCompact = null;
 
   function getStyleText() {
     return `
@@ -107,6 +109,28 @@
         line-height: 1.45 !important;
         margin-block: 0 !important;
         padding-block: 0 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe {
+        line-height: 1.45 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz {
+        display: block !important;
+        margin-block: 0 0.35em !important;
+        padding-block: 0 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .ryNqvb {
+        display: inline !important;
+        white-space: pre-line !important;
+        line-height: 1.45 !important;
+        margin-block: 0 !important;
+        padding-block: 0 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .NWlwsb {
+        margin-block: 0 !important;
       }
 
       @media (max-width: 720px) {
@@ -251,6 +275,96 @@
     document.documentElement.style.setProperty("--gtr-center-offset", `${centerOffset}px`);
   }
 
+  function normalizePreviewText(text) {
+    const lines = text
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    return lines.reduce((result, line) => {
+      const startsListItem = /^(?:\d+[\.)]|[-–—•])\s*/.test(line);
+      if (!result.length || startsListItem) {
+        result.push(line);
+      } else {
+        result[result.length - 1] = joinPreviewLines(result[result.length - 1], line);
+      }
+      return result;
+    }, []).join("\n");
+  }
+
+  function joinPreviewLines(left, right) {
+    const needsNoSpace = /[\u3400-\u9fff）】」』]$/.test(left) && /^[\u3400-\u9fff（【「『]/.test(right);
+    return needsNoSpace ? `${left}${right}` : `${left} ${right}`.replace(/\s+/g, " ");
+  }
+
+  function getCompactTextTargets(panels = state.panels) {
+    if (!panels?.rightPanel?.isConnected) {
+      return [];
+    }
+
+    return Array.from(panels.rightPanel.querySelectorAll(".HwtZe > .jCAhz > .ryNqvb"));
+  }
+
+  function applyCompactPreview(panels = state.panels) {
+    if (!state.currentSettings.compactPreview || !panels?.rightPanel?.isConnected) {
+      return;
+    }
+
+    state.isCompacting = true;
+    try {
+      for (const target of getCompactTextTargets(panels)) {
+        const entry = state.compactTextEntries.get(target);
+        const currentText = target.textContent ?? "";
+        const sourceText = entry && currentText === entry.normalized ? entry.original : currentText;
+        const normalized = normalizePreviewText(sourceText);
+
+        if (!normalized || normalized === currentText) {
+          if (!entry && normalized === currentText) {
+            state.compactTextEntries.set(target, { original: sourceText, normalized });
+          }
+          continue;
+        }
+
+        state.compactTextEntries.set(target, { original: sourceText, normalized });
+        target.textContent = normalized;
+      }
+    } finally {
+      state.isCompacting = false;
+    }
+  }
+
+  function restoreCompactPreview() {
+    state.compactObserver?.disconnect();
+    state.compactObserver = null;
+
+    for (const [target, entry] of state.compactTextEntries) {
+      if (target.isConnected && target.textContent === entry.normalized) {
+        target.textContent = entry.original;
+      }
+    }
+    state.compactTextEntries.clear();
+  }
+
+  function scheduleCompactPreview() {
+    window.clearTimeout(pendingCompact);
+    pendingCompact = window.setTimeout(() => applyCompactPreview(), 80);
+  }
+
+  function startCompactObserver(panels) {
+    state.compactObserver?.disconnect();
+    state.compactObserver = new MutationObserver(() => {
+      if (!state.isCompacting && state.currentSettings.compactPreview) {
+        scheduleCompactPreview();
+      }
+    });
+    state.compactObserver.observe(panels.rightPanel, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
   function applySettings(settings = state.currentSettings) {
     state.currentSettings = normalizeSettings(settings);
     ensureStyle();
@@ -259,6 +373,7 @@
     if (!state.currentSettings.enabled || !panels.found) {
       document.body.classList.remove("gtr-resizer-enabled");
       document.body.classList.remove("gtr-compact-preview-enabled");
+      restoreCompactPreview();
       if (!state.currentSettings.enabled) {
         clearMarkers();
       }
@@ -277,6 +392,12 @@
     setPageVariables(state.currentSettings, measureAnchorWidth(panels));
     document.body.classList.add("gtr-resizer-enabled");
     document.body.classList.toggle("gtr-compact-preview-enabled", state.currentSettings.compactPreview);
+    if (state.currentSettings.compactPreview) {
+      applyCompactPreview(panels);
+      startCompactObserver(panels);
+    } else {
+      restoreCompactPreview();
+    }
 
     return {
       ok: true,

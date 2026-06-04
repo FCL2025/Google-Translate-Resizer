@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.10";
+  const SCRIPT_VERSION = "0.1.11";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -16,7 +16,7 @@
   };
   const GAP_PX = 8;
   const STARTUP_REAPPLY_DELAYS = [120, 300, 700, 1500, 3000];
-  const INTERACTION_COMPACT_DELAY_MS = 70;
+  const INTERACTION_SETTLE_DELAY_MS = 180;
 
   const state = window.__gtrResizerState ?? {};
   window.__gtrResizerState = state;
@@ -26,6 +26,7 @@
   state.compactActionEntries ??= new Map();
   state.startupTimers ??= [];
   state.compactPauseUntil ??= 0;
+  state.compactInteractionActive ??= false;
 
   let pendingApply = null;
   let pendingCompact = null;
@@ -152,6 +153,10 @@
 
       body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .NWlwsb {
         margin-block: 0 !important;
+      }
+
+      body.gtr-resizer-enabled.gtr-compact-preview-enabled.gtr-compact-interacting [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .ryNqvb {
+        white-space: normal !important;
       }
 
       @media (max-width: 720px) {
@@ -419,7 +424,7 @@
       return;
     }
 
-    if (Date.now() < state.compactPauseUntil) {
+    if (state.compactInteractionActive || Date.now() < state.compactPauseUntil) {
       return;
     }
 
@@ -462,11 +467,24 @@
     }
     state.compactTextEntries.clear();
     restoreLegacyCompactActions();
+    window.clearTimeout(state.compactInteractionTimer);
+    state.compactInteractionActive = false;
+    document.body.classList.remove("gtr-compact-interacting");
   }
 
   function scheduleCompactPreview() {
     window.clearTimeout(pendingCompact);
     pendingCompact = window.setTimeout(() => applyCompactPreview(), 80);
+  }
+
+  function settleCompactInteraction() {
+    state.compactInteractionActive = false;
+    state.compactPauseUntil = Date.now() + INTERACTION_SETTLE_DELAY_MS;
+    window.clearTimeout(pendingCompact);
+    pendingCompact = window.setTimeout(() => {
+      applyCompactPreview();
+      document.body.classList.remove("gtr-compact-interacting");
+    }, INTERACTION_SETTLE_DELAY_MS + 10);
   }
 
   function pauseCompactDuringInteraction(event) {
@@ -479,9 +497,15 @@
       return;
     }
 
-    state.compactPauseUntil = Date.now() + INTERACTION_COMPACT_DELAY_MS;
     window.clearTimeout(pendingCompact);
-    pendingCompact = window.setTimeout(() => applyCompactPreview(), INTERACTION_COMPACT_DELAY_MS + 10);
+    window.clearTimeout(state.compactInteractionTimer);
+    if (event.type === "mouseout") {
+      state.compactInteractionTimer = window.setTimeout(settleCompactInteraction, INTERACTION_SETTLE_DELAY_MS);
+      return;
+    }
+
+    state.compactInteractionActive = true;
+    document.body.classList.add("gtr-compact-interacting");
   }
 
   function ensureCompactInteractionPause() {

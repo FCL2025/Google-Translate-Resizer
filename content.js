@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.7";
+  const SCRIPT_VERSION = "0.1.8";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -22,6 +22,7 @@
   state.anchorWidths ??= new WeakMap();
   state.currentSettings ??= { ...DEFAULT_SETTINGS };
   state.compactTextEntries ??= new Map();
+  state.compactActionEntries ??= new Map();
   state.startupTimers ??= [];
 
   let pendingApply = null;
@@ -132,6 +133,8 @@
         display: block !important;
         margin-block: 0 0.35em !important;
         padding-block: 0 !important;
+        max-inline-size: 100% !important;
+        max-width: 100% !important;
       }
 
       body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .ryNqvb {
@@ -140,6 +143,9 @@
         line-height: 1.45 !important;
         margin-block: 0 !important;
         padding-block: 0 !important;
+        max-inline-size: 100% !important;
+        max-width: 100% !important;
+        overflow-wrap: anywhere !important;
       }
 
       body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .NWlwsb {
@@ -322,6 +328,33 @@
     return Array.from(panels.rightPanel.querySelectorAll(".HwtZe > .jCAhz > .ryNqvb"));
   }
 
+  function stabilizeCompactTarget(target) {
+    if (!state.compactActionEntries.has(target)) {
+      state.compactActionEntries.set(target, {
+        jsaction: target.getAttribute("jsaction")
+      });
+    }
+
+    target.setAttribute("data-gtr-compact-stable", "true");
+    target.removeAttribute("jsaction");
+  }
+
+  function restoreCompactActions() {
+    for (const [target, entry] of state.compactActionEntries) {
+      if (!target.isConnected) {
+        continue;
+      }
+
+      if (entry.jsaction) {
+        target.setAttribute("jsaction", entry.jsaction);
+      } else {
+        target.removeAttribute("jsaction");
+      }
+      target.removeAttribute("data-gtr-compact-stable");
+    }
+    state.compactActionEntries.clear();
+  }
+
   function applyCompactPreview(panels = state.panels) {
     if (!state.currentSettings.compactPreview || !panels?.rightPanel?.isConnected) {
       return;
@@ -334,6 +367,7 @@
         const currentText = target.textContent ?? "";
         const sourceText = entry && currentText === entry.normalized ? entry.original : currentText;
         const normalized = normalizePreviewText(sourceText);
+        stabilizeCompactTarget(target);
 
         if (!normalized || normalized === currentText) {
           if (!entry && normalized === currentText) {
@@ -360,6 +394,7 @@
       }
     }
     state.compactTextEntries.clear();
+    restoreCompactActions();
   }
 
   function scheduleCompactPreview() {
@@ -367,7 +402,33 @@
     pendingCompact = window.setTimeout(() => applyCompactPreview(), 80);
   }
 
+  function guardCompactInteraction(event) {
+    if (!state.currentSettings.compactPreview) {
+      return;
+    }
+
+    const target = event.target instanceof Element
+      ? event.target.closest("[data-gtr-compact-stable='true']")
+      : event.target?.parentElement?.closest("[data-gtr-compact-stable='true']");
+
+    if (target) {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function ensureCompactInteractionGuard() {
+    if (state.compactInteractionGuard) {
+      return;
+    }
+
+    state.compactInteractionGuard = guardCompactInteraction;
+    for (const eventName of ["mouseover", "mouseout", "click"]) {
+      document.addEventListener(eventName, state.compactInteractionGuard, true);
+    }
+  }
+
   function startCompactObserver(panels) {
+    ensureCompactInteractionGuard();
     state.compactObserver?.disconnect();
     state.compactObserver = new MutationObserver(() => {
       if (!state.isCompacting && state.currentSettings.compactPreview) {
@@ -375,6 +436,8 @@
       }
     });
     state.compactObserver.observe(panels.rightPanel, {
+      attributes: true,
+      attributeFilter: ["jsaction"],
       childList: true,
       characterData: true,
       subtree: true

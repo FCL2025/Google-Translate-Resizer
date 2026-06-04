@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.9";
+  const SCRIPT_VERSION = "0.1.10";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -16,6 +16,7 @@
   };
   const GAP_PX = 8;
   const STARTUP_REAPPLY_DELAYS = [120, 300, 700, 1500, 3000];
+  const INTERACTION_COMPACT_DELAY_MS = 70;
 
   const state = window.__gtrResizerState ?? {};
   window.__gtrResizerState = state;
@@ -355,8 +356,7 @@
       const preserveSourceBreak = shouldPreservePreviewBreak(line, sourceNextLine);
 
       if (preserveSourceBreak) {
-        const separator = sourceNextLine?.blankBefore > 0 ? "\n\n" : "\n";
-        normalized = `${normalized}${separator}${line}`;
+        normalized = `${normalized}\n${line}`;
         consumedSourceLines += 1;
       } else {
         normalized = joinPreviewLines(normalized, line);
@@ -479,8 +479,9 @@
       return;
     }
 
-    state.compactPauseUntil = Date.now() + 600;
+    state.compactPauseUntil = Date.now() + INTERACTION_COMPACT_DELAY_MS;
     window.clearTimeout(pendingCompact);
+    pendingCompact = window.setTimeout(() => applyCompactPreview(), INTERACTION_COMPACT_DELAY_MS + 10);
   }
 
   function ensureCompactInteractionPause() {

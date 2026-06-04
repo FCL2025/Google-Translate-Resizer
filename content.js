@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.11";
+  const SCRIPT_VERSION = "0.1.12";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -16,7 +16,6 @@
   };
   const GAP_PX = 8;
   const STARTUP_REAPPLY_DELAYS = [120, 300, 700, 1500, 3000];
-  const INTERACTION_SETTLE_DELAY_MS = 180;
 
   const state = window.__gtrResizerState ?? {};
   window.__gtrResizerState = state;
@@ -25,8 +24,6 @@
   state.compactTextEntries ??= new Map();
   state.compactActionEntries ??= new Map();
   state.startupTimers ??= [];
-  state.compactPauseUntil ??= 0;
-  state.compactInteractionActive ??= false;
 
   let pendingApply = null;
   let pendingCompact = null;
@@ -153,10 +150,6 @@
 
       body.gtr-resizer-enabled.gtr-compact-preview-enabled [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .NWlwsb {
         margin-block: 0 !important;
-      }
-
-      body.gtr-resizer-enabled.gtr-compact-preview-enabled.gtr-compact-interacting [data-gtr-resizer-right="true"] .HwtZe > .jCAhz > .ryNqvb {
-        white-space: normal !important;
       }
 
       @media (max-width: 720px) {
@@ -399,7 +392,18 @@
     return Array.from(panels.rightPanel.querySelectorAll(".HwtZe > .jCAhz > .ryNqvb"));
   }
 
-  function restoreLegacyCompactActions(panels = state.panels) {
+  function stabilizeCompactTarget(target) {
+    if (!state.compactActionEntries.has(target)) {
+      state.compactActionEntries.set(target, {
+        jsaction: target.getAttribute("jsaction")
+      });
+    }
+
+    target.setAttribute("data-gtr-compact-stable", "true");
+    target.removeAttribute("jsaction");
+  }
+
+  function restoreCompactActions(panels = state.panels) {
     for (const [target, entry] of state.compactActionEntries) {
       if (!target.isConnected) {
         continue;
@@ -424,11 +428,6 @@
       return;
     }
 
-    if (state.compactInteractionActive || Date.now() < state.compactPauseUntil) {
-      return;
-    }
-
-    restoreLegacyCompactActions(panels);
     state.isCompacting = true;
     try {
       const sourceLines = getSourceLines(panels);
@@ -440,6 +439,7 @@
         const sourceText = entry && currentText === entry.normalized ? entry.original : currentText;
         const normalized = normalizePreviewText(sourceText, sourceLines, sourceLineIndex);
         sourceLineIndex += Math.max(1, normalized.consumedSourceLines);
+        stabilizeCompactTarget(target);
 
         if (!normalized.text || normalized.text === currentText) {
           if (!entry && normalized.text === currentText) {
@@ -466,10 +466,7 @@
       }
     }
     state.compactTextEntries.clear();
-    restoreLegacyCompactActions();
-    window.clearTimeout(state.compactInteractionTimer);
-    state.compactInteractionActive = false;
-    document.body.classList.remove("gtr-compact-interacting");
+    restoreCompactActions();
   }
 
   function scheduleCompactPreview() {
@@ -477,62 +474,48 @@
     pendingCompact = window.setTimeout(() => applyCompactPreview(), 80);
   }
 
-  function settleCompactInteraction() {
-    state.compactInteractionActive = false;
-    state.compactPauseUntil = Date.now() + INTERACTION_SETTLE_DELAY_MS;
-    window.clearTimeout(pendingCompact);
-    pendingCompact = window.setTimeout(() => {
-      applyCompactPreview();
-      document.body.classList.remove("gtr-compact-interacting");
-    }, INTERACTION_SETTLE_DELAY_MS + 10);
+  function guardCompactInteraction(event) {
+    if (!state.currentSettings.compactPreview) {
+      return;
+    }
+
+    const target = event.target instanceof Element
+      ? event.target.closest("[data-gtr-compact-stable='true']")
+      : event.target?.parentElement?.closest("[data-gtr-compact-stable='true']");
+
+    if (target) {
+      event.stopImmediatePropagation();
+    }
   }
 
-  function pauseCompactDuringInteraction(event) {
-    if (!state.currentSettings.compactPreview || !state.panels?.rightPanel?.isConnected) {
+  function ensureCompactInteractionGuard() {
+    removeLegacyCompactInteractionPause();
+    if (state.compactInteractionGuard) {
       return;
     }
 
-    const target = event.target instanceof Element ? event.target.closest(".ryNqvb") : null;
-    if (!target || !state.panels.rightPanel.contains(target)) {
-      return;
+    state.compactInteractionGuard = guardCompactInteraction;
+    for (const eventName of ["mouseover", "mouseout", "click"]) {
+      document.addEventListener(eventName, state.compactInteractionGuard, true);
     }
+  }
 
-    window.clearTimeout(pendingCompact);
+  function removeLegacyCompactInteractionPause() {
     window.clearTimeout(state.compactInteractionTimer);
-    if (event.type === "mouseout") {
-      state.compactInteractionTimer = window.setTimeout(settleCompactInteraction, INTERACTION_SETTLE_DELAY_MS);
-      return;
-    }
+    document.body.classList.remove("gtr-compact-interacting");
 
-    state.compactInteractionActive = true;
-    document.body.classList.add("gtr-compact-interacting");
-  }
-
-  function ensureCompactInteractionPause() {
-    removeLegacyCompactInteractionGuard();
-    if (state.compactInteractionPause) {
-      return;
-    }
-
-    state.compactInteractionPause = pauseCompactDuringInteraction;
-    for (const eventName of ["mouseover", "mouseout", "click"]) {
-      document.addEventListener(eventName, state.compactInteractionPause, true);
-    }
-  }
-
-  function removeLegacyCompactInteractionGuard() {
-    if (!state.compactInteractionGuard) {
+    if (!state.compactInteractionPause) {
       return;
     }
 
     for (const eventName of ["mouseover", "mouseout", "click"]) {
-      document.removeEventListener(eventName, state.compactInteractionGuard, true);
+      document.removeEventListener(eventName, state.compactInteractionPause, true);
     }
-    state.compactInteractionGuard = null;
+    state.compactInteractionPause = null;
   }
 
   function startCompactObserver(panels) {
-    ensureCompactInteractionPause();
+    ensureCompactInteractionGuard();
     state.compactObserver?.disconnect();
     state.compactObserver = new MutationObserver(() => {
       if (!state.isCompacting && state.currentSettings.compactPreview) {
@@ -540,6 +523,8 @@
       }
     });
     state.compactObserver.observe(panels.rightPanel, {
+      attributes: true,
+      attributeFilter: ["jsaction"],
       childList: true,
       characterData: true,
       subtree: true

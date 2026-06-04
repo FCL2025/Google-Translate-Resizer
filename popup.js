@@ -1,5 +1,5 @@
 const STORAGE_KEY = "gtrSettings";
-const CONTENT_VERSION = "0.1.8";
+const CONTENT_VERSION = "0.1.9";
 const DEFAULT_SETTINGS = {
   enabled: true,
   linked: true,

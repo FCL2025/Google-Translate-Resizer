@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.8";
+  const SCRIPT_VERSION = "0.1.9";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -24,6 +24,7 @@
   state.compactTextEntries ??= new Map();
   state.compactActionEntries ??= new Map();
   state.startupTimers ??= [];
+  state.compactPauseUntil ??= 0;
 
   let pendingApply = null;
   let pendingCompact = null;
@@ -297,22 +298,87 @@
     document.documentElement.style.setProperty("--gtr-center-offset", `${centerOffset}px`);
   }
 
-  function normalizePreviewText(text) {
+  function isStructuredLine(line) {
+    return /^(?:\d+[\.)]|[-–—•])\s*/.test(line);
+  }
+
+  function getSourceText(panels = state.panels) {
+    const textarea = panels?.leftPanel?.querySelector("textarea.er8xn");
+    if (textarea?.value) {
+      return textarea.value;
+    }
+
+    return panels?.leftPanel?.querySelector("[jsname='ZdXDJ']")?.textContent ?? "";
+  }
+
+  function getSourceLines(panels = state.panels) {
+    let blankBefore = 0;
+    return getSourceText(panels)
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .reduce((lines, line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          blankBefore += 1;
+          return lines;
+        }
+
+        lines.push({
+          blankBefore,
+          isStructured: isStructuredLine(trimmed),
+          text: trimmed
+        });
+        blankBefore = 0;
+        return lines;
+      }, []);
+  }
+
+  function normalizePreviewText(text, sourceLines = [], sourceStartIndex = 0) {
     const lines = text
       .replace(/\r\n?/g, "\n")
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
-    return lines.reduce((result, line) => {
-      const startsListItem = /^(?:\d+[\.)]|[-–—•])\s*/.test(line);
-      if (!result.length || startsListItem) {
-        result.push(line);
+    if (!lines.length) {
+      return {
+        consumedSourceLines: 0,
+        text: ""
+      };
+    }
+
+    let consumedSourceLines = 1;
+    let normalized = lines[0];
+
+    for (const line of lines.slice(1)) {
+      const sourceNextLine = sourceLines[sourceStartIndex + consumedSourceLines];
+      const preserveSourceBreak = shouldPreservePreviewBreak(line, sourceNextLine);
+
+      if (preserveSourceBreak) {
+        const separator = sourceNextLine?.blankBefore > 0 ? "\n\n" : "\n";
+        normalized = `${normalized}${separator}${line}`;
+        consumedSourceLines += 1;
       } else {
-        result[result.length - 1] = joinPreviewLines(result[result.length - 1], line);
+        normalized = joinPreviewLines(normalized, line);
       }
-      return result;
-    }, []).join("\n");
+    }
+
+    return {
+      consumedSourceLines,
+      text: normalized
+    };
+  }
+
+  function shouldPreservePreviewBreak(line, sourceNextLine) {
+    if (isStructuredLine(line)) {
+      return true;
+    }
+
+    if (!sourceNextLine) {
+      return false;
+    }
+
+    return !sourceNextLine.isStructured;
   }
 
   function joinPreviewLines(left, right) {
@@ -328,18 +394,7 @@
     return Array.from(panels.rightPanel.querySelectorAll(".HwtZe > .jCAhz > .ryNqvb"));
   }
 
-  function stabilizeCompactTarget(target) {
-    if (!state.compactActionEntries.has(target)) {
-      state.compactActionEntries.set(target, {
-        jsaction: target.getAttribute("jsaction")
-      });
-    }
-
-    target.setAttribute("data-gtr-compact-stable", "true");
-    target.removeAttribute("jsaction");
-  }
-
-  function restoreCompactActions() {
+  function restoreLegacyCompactActions(panels = state.panels) {
     for (const [target, entry] of state.compactActionEntries) {
       if (!target.isConnected) {
         continue;
@@ -353,6 +408,10 @@
       target.removeAttribute("data-gtr-compact-stable");
     }
     state.compactActionEntries.clear();
+
+    panels?.rightPanel
+      ?.querySelectorAll("[data-gtr-compact-stable='true']")
+      .forEach((target) => target.removeAttribute("data-gtr-compact-stable"));
   }
 
   function applyCompactPreview(panels = state.panels) {
@@ -360,24 +419,32 @@
       return;
     }
 
+    if (Date.now() < state.compactPauseUntil) {
+      return;
+    }
+
+    restoreLegacyCompactActions(panels);
     state.isCompacting = true;
     try {
+      const sourceLines = getSourceLines(panels);
+      let sourceLineIndex = 0;
+
       for (const target of getCompactTextTargets(panels)) {
         const entry = state.compactTextEntries.get(target);
         const currentText = target.textContent ?? "";
         const sourceText = entry && currentText === entry.normalized ? entry.original : currentText;
-        const normalized = normalizePreviewText(sourceText);
-        stabilizeCompactTarget(target);
+        const normalized = normalizePreviewText(sourceText, sourceLines, sourceLineIndex);
+        sourceLineIndex += Math.max(1, normalized.consumedSourceLines);
 
-        if (!normalized || normalized === currentText) {
-          if (!entry && normalized === currentText) {
-            state.compactTextEntries.set(target, { original: sourceText, normalized });
+        if (!normalized.text || normalized.text === currentText) {
+          if (!entry && normalized.text === currentText) {
+            state.compactTextEntries.set(target, { original: sourceText, normalized: normalized.text });
           }
           continue;
         }
 
-        state.compactTextEntries.set(target, { original: sourceText, normalized });
-        target.textContent = normalized;
+        state.compactTextEntries.set(target, { original: sourceText, normalized: normalized.text });
+        target.textContent = normalized.text;
       }
     } finally {
       state.isCompacting = false;
@@ -394,7 +461,7 @@
       }
     }
     state.compactTextEntries.clear();
-    restoreCompactActions();
+    restoreLegacyCompactActions();
   }
 
   function scheduleCompactPreview() {
@@ -402,33 +469,45 @@
     pendingCompact = window.setTimeout(() => applyCompactPreview(), 80);
   }
 
-  function guardCompactInteraction(event) {
-    if (!state.currentSettings.compactPreview) {
+  function pauseCompactDuringInteraction(event) {
+    if (!state.currentSettings.compactPreview || !state.panels?.rightPanel?.isConnected) {
       return;
     }
 
-    const target = event.target instanceof Element
-      ? event.target.closest("[data-gtr-compact-stable='true']")
-      : event.target?.parentElement?.closest("[data-gtr-compact-stable='true']");
+    const target = event.target instanceof Element ? event.target.closest(".ryNqvb") : null;
+    if (!target || !state.panels.rightPanel.contains(target)) {
+      return;
+    }
 
-    if (target) {
-      event.stopImmediatePropagation();
+    state.compactPauseUntil = Date.now() + 600;
+    window.clearTimeout(pendingCompact);
+  }
+
+  function ensureCompactInteractionPause() {
+    removeLegacyCompactInteractionGuard();
+    if (state.compactInteractionPause) {
+      return;
+    }
+
+    state.compactInteractionPause = pauseCompactDuringInteraction;
+    for (const eventName of ["mouseover", "mouseout", "click"]) {
+      document.addEventListener(eventName, state.compactInteractionPause, true);
     }
   }
 
-  function ensureCompactInteractionGuard() {
-    if (state.compactInteractionGuard) {
+  function removeLegacyCompactInteractionGuard() {
+    if (!state.compactInteractionGuard) {
       return;
     }
 
-    state.compactInteractionGuard = guardCompactInteraction;
     for (const eventName of ["mouseover", "mouseout", "click"]) {
-      document.addEventListener(eventName, state.compactInteractionGuard, true);
+      document.removeEventListener(eventName, state.compactInteractionGuard, true);
     }
+    state.compactInteractionGuard = null;
   }
 
   function startCompactObserver(panels) {
-    ensureCompactInteractionGuard();
+    ensureCompactInteractionPause();
     state.compactObserver?.disconnect();
     state.compactObserver = new MutationObserver(() => {
       if (!state.isCompacting && state.currentSettings.compactPreview) {
@@ -436,8 +515,6 @@
       }
     });
     state.compactObserver.observe(panels.rightPanel, {
-      attributes: true,
-      attributeFilter: ["jsaction"],
       childList: true,
       characterData: true,
       subtree: true

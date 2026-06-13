@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "0.1.12";
+  const SCRIPT_VERSION = "0.1.13";
   const STYLE_ID = "gtr-resizer-style";
   const STORAGE_KEY = "gtrSettings";
   const DEFAULT_SETTINGS = {
@@ -16,6 +16,7 @@
   };
   const GAP_PX = 8;
   const STARTUP_REAPPLY_DELAYS = [120, 300, 700, 1500, 3000];
+  const STACKED_BREAKPOINT_PX = 720;
 
   const state = window.__gtrResizerState ?? {};
   window.__gtrResizerState = state;
@@ -157,12 +158,16 @@
           display: block !important;
           inline-size: auto !important;
           width: auto !important;
+          margin-inline: 0 !important;
+          max-inline-size: 100% !important;
+          max-width: 100% !important;
         }
 
         body.gtr-resizer-enabled [data-gtr-resizer-left="true"],
         body.gtr-resizer-enabled [data-gtr-resizer-right="true"] {
           inline-size: 100% !important;
           width: 100% !important;
+          margin-block-end: var(--gtr-gap-width) !important;
         }
       }
     `;
@@ -265,11 +270,6 @@
   }
 
   function measureAnchorWidth(panels) {
-    const cachedWidth = state.anchorWidths.get(panels.container);
-    if (cachedWidth) {
-      return cachedWidth;
-    }
-
     const wasEnabled = document.body.classList.contains("gtr-resizer-enabled");
     document.body.classList.remove("gtr-resizer-enabled");
 
@@ -280,13 +280,52 @@
     const anchorWidth = Math.max(1, Math.round(anchorRight - anchorLeft));
 
     document.body.classList.toggle("gtr-resizer-enabled", wasEnabled);
-    state.anchorWidths.set(panels.container, anchorWidth);
     return anchorWidth;
   }
 
-  function setPageVariables(settings, anchorWidth) {
+  function getResponsiveGutterWidth() {
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (viewportWidth <= 900) {
+      return 32;
+    }
+
+    if (viewportWidth <= 1280) {
+      return 64;
+    }
+
+    return 96;
+  }
+
+  function getResponsiveWidths(settings) {
     const widths = getEffectiveWidths(settings);
-    const totalWidth = widths.left + widths.right + GAP_PX;
+    const desiredContentWidth = widths.left + widths.right;
+    const desiredTotalWidth = desiredContentWidth + GAP_PX;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || desiredTotalWidth;
+    const availableTotalWidth = Math.max(0, viewportWidth - getResponsiveGutterWidth());
+
+    if (viewportWidth <= STACKED_BREAKPOINT_PX || desiredTotalWidth <= availableTotalWidth) {
+      return {
+        left: widths.left,
+        right: widths.right,
+        total: desiredTotalWidth
+      };
+    }
+
+    const availableContentWidth = Math.max(1, availableTotalWidth - GAP_PX);
+    const scale = availableContentWidth / Math.max(1, desiredContentWidth);
+    const left = Math.max(1, Math.floor(widths.left * scale));
+    const right = Math.max(1, availableContentWidth - left);
+
+    return {
+      left,
+      right,
+      total: left + right + GAP_PX
+    };
+  }
+
+  function setPageVariables(settings, anchorWidth) {
+    const widths = getResponsiveWidths(settings);
+    const totalWidth = widths.total;
     const centerOffset = (anchorWidth - totalWidth) / 2;
 
     document.documentElement.style.setProperty("--gtr-left-width", `${widths.left}px`);
@@ -295,6 +334,7 @@
     document.documentElement.style.setProperty("--gtr-total-width", `${totalWidth}px`);
     document.documentElement.style.setProperty("--gtr-anchor-width", `${anchorWidth}px`);
     document.documentElement.style.setProperty("--gtr-center-offset", `${centerOffset}px`);
+    return widths;
   }
 
   function isStructuredLine(line) {
@@ -534,6 +574,7 @@
   function applySettings(settings = state.currentSettings) {
     state.currentSettings = normalizeSettings(settings);
     ensureStyle();
+    const effectiveWidths = getEffectiveWidths(state.currentSettings);
 
     const panels = findPanels();
     if (!state.currentSettings.enabled || !panels.found) {
@@ -549,13 +590,13 @@
         version: SCRIPT_VERSION,
         enabled: state.currentSettings.enabled,
         found: panels.found,
-        leftWidth: getEffectiveWidths(state.currentSettings).left,
-        rightWidth: getEffectiveWidths(state.currentSettings).right
+        leftWidth: effectiveWidths.left,
+        rightWidth: effectiveWidths.right
       };
     }
 
     markPanels(panels);
-    setPageVariables(state.currentSettings, measureAnchorWidth(panels));
+    const responsiveWidths = setPageVariables(state.currentSettings, measureAnchorWidth(panels));
     document.body.classList.add("gtr-resizer-enabled");
     document.body.classList.toggle("gtr-compact-preview-enabled", state.currentSettings.compactPreview);
     if (state.currentSettings.compactPreview) {
@@ -570,8 +611,10 @@
       version: SCRIPT_VERSION,
       enabled: state.currentSettings.enabled,
       found: panels.found,
-      leftWidth: getEffectiveWidths(state.currentSettings).left,
-      rightWidth: getEffectiveWidths(state.currentSettings).right
+      leftWidth: responsiveWidths.left,
+      rightWidth: responsiveWidths.right,
+      configuredLeftWidth: effectiveWidths.left,
+      configuredRightWidth: effectiveWidths.right
     };
   }
 
@@ -623,6 +666,22 @@
     });
   }
 
+  function startResizeObserver() {
+    if (!state.resizeListener) {
+      state.resizeListener = () => {
+        if (state.currentSettings.enabled) {
+          scheduleApply();
+        }
+      };
+      window.addEventListener("resize", state.resizeListener, { passive: true });
+    }
+
+    if (window.visualViewport && !state.visualViewportResizeListener) {
+      state.visualViewportResizeListener = state.resizeListener;
+      window.visualViewport.addEventListener("resize", state.visualViewportResizeListener, { passive: true });
+    }
+  }
+
   state.applySettings = applySettings;
   window.__gtrResizerApplySettings = applySettings;
   window.__gtrResizerVersion = SCRIPT_VERSION;
@@ -631,6 +690,7 @@
     state.currentSettings = normalizeSettings(result[STORAGE_KEY]);
     applySettings(state.currentSettings);
     startObserver();
+    startResizeObserver();
     scheduleStartupReapply();
   });
 
